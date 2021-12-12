@@ -27,6 +27,9 @@
 /// THE SOFTWARE.
 
 import UIKit
+import CoreML
+import CoreMedia
+import Vision
 
 class ViewController: UIViewController {
   
@@ -39,6 +42,40 @@ class ViewController: UIViewController {
 
   var firstTime = true
 
+    
+  lazy var classificationRequest: VNCoreMLRequest = {
+        do{
+            let classifier = try SnackClassifier(configuration: MLModelConfiguration())
+            let model = try VNCoreMLModel(for: classifier.model)
+            let request = VNCoreMLRequest(model: model, completionHandler: {
+                [weak self] request,error in
+                self?.processObservations(for: request, error: error)
+            })
+            request.imageCropAndScaleOption = .centerCrop
+            return request
+            
+            
+        } catch {
+            fatalError("Failed to create request")
+        }
+    }()
+    lazy var healthyclassificationRequest: VNCoreMLRequest = {
+        do{
+            let classifier = try HealthyClassifier(configuration: MLModelConfiguration())
+            
+            let model = try VNCoreMLModel(for: classifier.model)
+            let request = VNCoreMLRequest(model: model, completionHandler: {
+                [weak self] request,error in
+                self?.processObservations(for: request, error: error)
+            })
+            request.imageCropAndScaleOption = .centerCrop
+            return request
+            
+            
+        } catch {
+            fatalError("Failed to create request")
+        }
+    }()
   override func viewDidLoad() {
     super.viewDidLoad()
     cameraButton.isEnabled = UIImagePickerController.isSourceTypeAvailable(.camera)
@@ -96,7 +133,43 @@ class ViewController: UIViewController {
   }
 
   func classify(image: UIImage) {
+      DispatchQueue.global(qos: .userInitiated).async {
+            let handler = VNImageRequestHandler(cgImage: image.cgImage!)
+            do {
+                //try handler.perform([self.classificationRequest]) task1
+                try handler.perform([self.healthyclassificationRequest])//task2
+            } catch {
+                print("Failed to perform classification: \(error)")
+            }
+      }
   }
+    
+}
+
+extension ViewController {
+    func processObservations(for request: VNRequest, error: Error?) {
+        if let results = request.results as? [VNClassificationObservation] {
+            if results.isEmpty {
+                self.resultsLabel.text = "Nothing found"
+            } else {
+                let result = results[0].identifier
+                let confidence = results[0].confidence
+                DispatchQueue.main.async {
+                    if confidence > 0.8{
+                        self.resultsLabel.text = result + String(format: "   %.1f%%", confidence * 100)
+                    }else{
+                        self.resultsLabel.text = "I'm not sure."
+                    }
+                    self.showResultsView()
+                }
+                print(result)
+            }
+        } else if let error = error {
+            self.resultsLabel.text = "Error: \(error.localizedDescription)"
+        } else {
+            self.resultsLabel.text = "???"
+        }
+    }
 }
 
 extension ViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {

@@ -102,6 +102,7 @@ extension ViewController {
     }
 }
 
+
 extension ViewController {
     func processObservations(for request: VNRequest, error: Error?) {
         if let results = request.results as? [VNClassificationObservation] {
